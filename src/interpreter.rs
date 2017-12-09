@@ -65,6 +65,7 @@ fn eval_step(term: &Term, ctx: &Context) -> Result<Term, EvalError> {
         &Application(ref term1, ref term2) => {
             Ok(Application(box eval_step(term1, ctx)?, term2.clone()))
         },
+        &Abstraction(ref name, ref term1) => Ok(Abstraction(name.to_owned(), box eval_step(term1, ctx)?)),
         _ => eval_error!("No rule applies!")
     }
 }
@@ -72,6 +73,7 @@ fn eval_step(term: &Term, ctx: &Context) -> Result<Term, EvalError> {
 fn is_value(term: &Term) -> bool {
     match term {
         &Abstraction(_, _) => true,
+        &Variable(_, _) => true,
         _ => false
     }
 }
