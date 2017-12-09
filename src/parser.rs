@@ -117,7 +117,7 @@ impl<'a> fmt::Display for TermWithContext<'a> {
             Abstraction(ref var, ref term) => {
                 let (new_context, var1) = self.context.pick_fresh_name(var);
                 write!(
-                    f, "(lambda {}. {})", var1, TermWithContext {
+                    f, "λ{}.{}", var1, TermWithContext {
                         context: &new_context, term: term
                     }
                 )
@@ -250,9 +250,9 @@ mod tests {
                 box Application(box Variable(0, 2), box Variable(1, 2)),
             ),
         );
-        assert_eq!(term.to_string(), "(lambda x. (lambda x'. (x' x)))");
+        assert_eq!(term.to_string(), "λx.λx'.(x' x)");
 
         let term = Abstraction("x".to_string(), box Abstraction("y".to_string(), box Application(box Application(box Variable(0, 2), box Variable(1, 2)), box Variable(0, 2))));
-        assert_eq!(term.to_string(), "(lambda x. (lambda y. ((y x) y)))");
+        assert_eq!(term.to_string(), "λx.λy.((y x) y)");
     }
 }
