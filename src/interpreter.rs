@@ -56,24 +56,34 @@ pub fn eval(term: &Term, ctx: &Context) -> Term {
 
 fn eval_step(term: &Term, ctx: &Context) -> Result<Term, EvalError> {
     match term {
-        &Application(box Abstraction(_, ref term1), ref term2) if is_value(&term2) => {
+        &Application(box Abstraction(_, ref term1), ref term2) if is_value(&term2, ctx) => {
             Ok(substitute(term1, term2))
         },
-        &Application(ref term1, ref term2) if is_value(term1) => {
+        &Application(ref term1, ref term2) if is_value(term1, ctx) => {
             Ok(Application(term1.clone(), box eval_step(term2, ctx)?))
         },
         &Application(ref term1, ref term2) => {
             Ok(Application(box eval_step(term1, ctx)?, term2.clone()))
         },
-        &Abstraction(ref name, ref term1) => Ok(Abstraction(name.to_owned(), box eval_step(term1, ctx)?)),
+        &Abstraction(ref name, ref term1) => {
+            let (new_ctx, entry) = ctx.pick_fresh_name(name);
+            Ok(Abstraction(entry.name, box eval_step(term1, &new_ctx)?))
+        },
         _ => eval_error!("No rule applies!")
     }
 }
 
-fn is_value(term: &Term) -> bool {
+fn is_value(term: &Term, ctx: &Context) -> bool {
     match term {
         &Abstraction(_, _) => true,
         &Variable(_, _) => true,
+        &Application(box Variable(var1, _), ref term2) => {
+            if ctx.is_index_bound(var1) && is_value(term2, ctx) {
+                true
+            } else {
+                false
+            }
+        },
         _ => false
     }
 }

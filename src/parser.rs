@@ -18,8 +18,8 @@ pub enum Binding {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct ContextEntry {
-    name: String,
+pub struct ContextEntry {
+    pub name: String,
     binding: Binding,
 }
 
@@ -69,7 +69,7 @@ impl Context {
         walk(self.entries.as_slice(), name.to_owned())
     }
 
-    fn pick_fresh_name(&self, var: &str) -> (Context, ContextEntry) {
+    pub fn pick_fresh_name(&self, var: &str) -> (Context, ContextEntry) {
         let name = var.to_owned();
 
         if self.is_name_bound(var) {
@@ -84,6 +84,10 @@ impl Context {
 
             (new_context, entry)
         }
+    }
+
+    pub fn is_index_bound(&self, index: u32) -> bool {
+        index < (self.entries.len() as u32)
     }
 }
 
