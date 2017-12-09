@@ -1,8 +1,13 @@
 use std::fmt;
 
+use lexer::tokenize;
+use lexer::SyntaxError;
+
+use parser::parse;
 use parser::Term;
 use parser::Term::*;
 use parser::Context;
+use parser::ParseError;
 
 #[derive(PartialEq)]
 pub struct EvalError {
@@ -19,6 +24,27 @@ macro_rules! eval_error {
     ($($arg:tt)*) => (
         return Err(EvalError { message: format!($($arg)*) })
     )
+}
+
+pub fn run(source: &str) -> Result<String, String> {
+    let tokens = match tokenize(source) {
+        Ok(res) => res,
+        Err(SyntaxError{message: msg, ..}) => return Err(msg)
+    };
+    let terms = match parse(tokens) {
+        Ok(res) => res,
+        Err(ParseError{message: msg}) => return Err(msg)
+    };
+    let values = terms.iter()
+        .map(|t| eval(&t, &Context::new()))
+        .map(|t| t.to_string())
+        .fold("".to_string(), |acc, v| if acc.is_empty() {
+            v
+        } else {
+            format!("{}\n{}", acc, v)
+        });
+
+    Ok(values)
 }
 
 pub fn eval(term: &Term, ctx: &Context) -> Term {

@@ -3,11 +3,15 @@
 
 #![feature(slice_patterns)]
 
+extern crate rustyline;
+
 mod lexer;
 mod parser;
 mod interpreter;
+mod repl;
 
 fn main() {
-    let mut chars = "3".chars();
-    println!("{:?}", chars.next().unwrap().to_digit(32));
+    println!("\nWelcome to the Untyped Lambda Calculus REPL!");
+    repl::start("> ", (|s| interpreter::run(&s)))
 }
+

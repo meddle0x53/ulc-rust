@@ -40,9 +40,11 @@ pub enum IndexingError {
 }
 
 impl Context {
+    pub fn new() -> Context {
+        Context{entries: Vec::new()}
+    }
+
     fn index_to_name(&self, index: u32) -> Result<ContextEntry, IndexingError> {
-        println!("{:?}", index);
-        println!("{:?}", self.entries);
         if index >= (self.entries.len() as u32) {
             Err(IndexingError::BadIndex(index, self.entries.len() as u32))
         } else {
@@ -189,31 +191,16 @@ fn parse_term_from_tokens(token: &Token, tokens: &mut Peekable<Iter<Token>>) -> 
         },
         &OpenParen => {
             if let Some(token1) = tokens.next() {
-                match token1 {
-                    &Lambda(ref name) => {
-                        if let Some(next_token) = tokens.next() {
-                            if let Some(&CloseParen) = tokens.next() {
-                                Ok(Abstraction(name.to_owned(), box parse_term_from_tokens(next_token, tokens)?))
-                            } else {
-                                parse_error!("Invalid expression : Openning paren has no correspondent closing one")
-                            }
-                        } else {
-                            parse_error!("Lambda without a term")
-                        }
-                    },
-                    _ => {
-                        let term1 = parse_term_from_tokens(token1, tokens)?;
-                        if let Some(token2) = tokens.next() {
-                            let term2 = parse_term_from_tokens(token2, tokens)?;
-                            if let Some(&CloseParen) = tokens.next() {
-                                Ok(Application(box term1, box term2))
-                            } else {
-                                parse_error!("Invalid expression : Openning paren has no correspondent closing one")
-                            }
-                        } else {
-                            parse_error!("Invalid expression ending on openning paren")
-                        }
+                let term1 = parse_term_from_tokens(token1, tokens)?;
+                if let Some(token2) = tokens.next() {
+                    let term2 = parse_term_from_tokens(token2, tokens)?;
+                    if let Some(&CloseParen) = tokens.next() {
+                        Ok(Application(box term1, box term2))
+                    } else {
+                        parse_error!("Invalid expression : Openning paren has no correspondent closing one")
                     }
+                } else {
+                    parse_error!("Invalid expression ending on openning paren")
                 }
 
             } else {
