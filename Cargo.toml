@@ -5,3 +5,4 @@ authors = ["meddle <n.tzvetinov@gmail.com>"]
 
 [dependencies]
 rustyline = "1.0.0"
+colored = "1.6"

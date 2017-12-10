@@ -1,6 +1,8 @@
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
 
+use colored::*;
+
 fn ask(prompt: &str, rl: &mut Editor<()>) -> Option<String> {
     let readline = rl.readline(prompt);
 
@@ -31,8 +33,17 @@ pub fn start<F: Fn(String) -> Result<String, String>>(prompt: &str, f: F) {
         match ask(prompt, &mut rl) {
             Some(input) => {
                 if input.len() > 0 {
-                    let result = f(input);
-                    println!("{}", result.unwrap_or_else(|e| format!("Error: {}", e)));
+                    match f(input) {
+                        Ok(result) => {
+                            let output = format!("{}", result);
+                            if output.contains("BadIndex") {
+                                println!("{}", "Error: invalid term".red())
+                            } else {
+                                println!("{}", output.yellow())
+                            }
+                        },
+                        Err(e) => println!("{}", format!("Error: {}", e).red())
+                    }
                 }
             },
             None => return

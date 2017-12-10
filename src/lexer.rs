@@ -97,7 +97,7 @@ fn tokenize_named(input: &str) -> Result<Vec<NamedToken>, SyntaxError> {
             _  => {
                 if character.is_whitespace() {
                     ()
-                } else if character == 'l' && (&input[index..(index + 7)] == "lambda ") {
+                } else if character == 'l' && (&input.chars().count() - index) > 7 && (&input[index..(index + 7)] == "lambda ") {
                     for _ in 1..7 { chars.next(); };
                     create_named_lambda(&mut chars, &mut tokens)?
                 } else if is_valid_var(character as u8) {
