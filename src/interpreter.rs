@@ -8,6 +8,7 @@ use parser::Term;
 use parser::Term::*;
 use parser::Context;
 use parser::ParseError;
+use parser::Runtime;
 
 #[derive(PartialEq)]
 pub struct EvalError {
@@ -26,12 +27,12 @@ macro_rules! eval_error {
     )
 }
 
-pub fn run(source: &str) -> Result<String, String> {
+pub fn run(source: &str, runtime: &mut Runtime) -> Result<String, String> {
     let tokens = match tokenize(source) {
         Ok(res) => res,
         Err(SyntaxError{message: msg, ..}) => return Err(msg)
     };
-    let terms = match parse(tokens) {
+    let terms = match parse(tokens, runtime) {
         Ok(res) => res,
         Err(ParseError{message: msg}) => return Err(msg)
     };
@@ -48,26 +49,26 @@ pub fn run(source: &str) -> Result<String, String> {
 }
 
 pub fn eval(term: &Term, ctx: &Context) -> Term {
-    match eval_step(term, ctx) {
+    match eval_step(term, ctx, true) {
         Ok(term1) => eval(&term1, ctx),
         Err(EvalError{ message: _ }) => term.clone(),
     }
 }
 
-fn eval_step(term: &Term, ctx: &Context) -> Result<Term, EvalError> {
+fn eval_step(term: &Term, ctx: &Context, cont: bool) -> Result<Term, EvalError> {
     match term {
         &Application(box Abstraction(_, ref term1), ref term2) if is_value(&term2, ctx) => {
             Ok(substitute(term1, term2))
         },
         &Application(ref term1, ref term2) if is_value(term1, ctx) => {
-            Ok(Application(term1.clone(), box eval_step(term2, ctx)?))
+            Ok(Application(term1.clone(), box eval_step(term2, ctx, cont)?))
         },
         &Application(ref term1, ref term2) => {
-            Ok(Application(box eval_step(term1, ctx)?, term2.clone()))
+            Ok(Application(box eval_step(term1, ctx, cont)?, term2.clone()))
         },
         &Abstraction(ref name, ref term1) => {
             let (new_ctx, entry) = ctx.pick_fresh_name(name);
-            Ok(Abstraction(entry.name, box eval_step(term1, &new_ctx)?))
+            Ok(Abstraction(entry.name, box eval_step(term1, &new_ctx, true)?))
         },
         _ => eval_error!("No rule applies!")
     }

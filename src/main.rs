@@ -14,7 +14,7 @@ mod repl;
 use colored::*;
 
 fn main() {
-    println!("{}", "\nInteractive Untyped Lambda Calculus (0.1.0) - press Ctrl+C to exit\n".blue());
-    repl::start("> ", (|s| interpreter::run(&s)))
+    println!("{}", "\nInteractive Untyped Lambda Calculus (0.2.0) - press Ctrl+C to exit\n".blue());
+    repl::start("> ", (|s, runtime| interpreter::run(&s, runtime)))
 }
 

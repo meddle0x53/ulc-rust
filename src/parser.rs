@@ -1,9 +1,9 @@
 use std::fmt;
 use std::slice::Iter;
 use std::iter::Peekable;
+use std::collections::HashMap;
 
 use lexer::Token;
-use lexer::Token::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Term {
@@ -11,6 +11,8 @@ pub enum Term {
     Abstraction(String, Box<Term>),
     Application(Box<Term>, Box<Term>)
 }
+
+pub type Runtime = HashMap<String, Term>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Binding {
@@ -39,6 +41,11 @@ pub enum IndexingError {
     BadIndex(u32, u32)
 }
 
+#[derive(PartialEq)]
+pub struct ParseError {
+    pub message: String,
+}
+
 impl Context {
     pub fn new() -> Context {
         Context{entries: Vec::new()}
@@ -50,6 +57,23 @@ impl Context {
         } else {
             Ok((&self.entries[(index) as usize]).clone())
         }
+    }
+
+    fn name_to_index(&self, name: &str) -> Result<u32, ParseError> {
+        fn walk(slc: &[ContextEntry], name: String, i: u32) -> Result<u32, ParseError> {
+            match *slc {
+                [] => Err(ParseError{message: format!("Unbound var {}", name)}),
+                [ref head, ref tail..] => {
+                    if head.name == name {
+                        Ok(i)
+                    } else {
+                        walk(tail, name, i + 1)
+                    }
+                }
+            }
+        }
+
+        walk(self.entries.as_slice(), name.to_owned(), 0)
     }
 
     fn is_name_bound(&self, name: &str) -> bool {
@@ -143,11 +167,6 @@ impl<'a> fmt::Display for TermWithContext<'a> {
     }
 }
 
-#[derive(PartialEq)]
-pub struct ParseError {
-    pub message: String,
-}
-
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "ParseError: {}", self.message)
@@ -165,39 +184,53 @@ macro_rules! parse_error {
     )
 }
 
+use lexer::Token::*;
 use self::Term::*;
 
-pub fn parse(tokens: Vec<Token>) -> Result<Vec<Term>, ParseError> {
+pub fn parse(tokens: Vec<Token>, runtime: &mut Runtime) -> Result<Vec<Term>, ParseError> {
     if tokens.is_empty() { parse_error!("Empty expression") }
 
+    //let de_bruijn_tokens = convert_to_de_bruijn_tokens(&tokens);
 
     let mut vec = Vec::new();
-    let mut token_iterator: Peekable<Iter<Token>> = tokens.iter().peekable();
+    let mut token_iterator: Peekable<Iter<Token>> =
+        tokens.iter().peekable();
 
+    let context = &Context::new();
     while let Some(token) = token_iterator.next() {
-        vec.push(parse_term_from_tokens(token, &mut token_iterator)?);
+        vec.push(parse_term_from_tokens(token, &mut token_iterator, context, runtime)?);
     }
 
     Ok(vec)
 }
 
-fn parse_term_from_tokens(token: &Token, tokens: &mut Peekable<Iter<Token>>) -> Result<Term, ParseError> {
+fn parse_term_from_tokens(
+    token: &Token, tokens: &mut Peekable<Iter<Token>>, context: &Context,
+    runtime: &mut Runtime
+) -> Result<Term, ParseError> {
     match token {
         &Lambda(ref name) => {
             if let Some(next_token) = tokens.next() {
-                Ok(Abstraction(name.to_owned(), box parse_term_from_tokens(next_token, tokens)?))
+                let (new_context, var1) = context.pick_fresh_name(name);
+                Ok(Abstraction(
+                        var1.name.to_owned(),
+                        box parse_term_from_tokens(
+                            next_token, tokens, &new_context, runtime
+                        )?
+                ))
             } else {
                 parse_error!("Lambda without a term")
             }
         },
-        &Number(index, check) => {
-            Ok(Variable(index, check))
+        &Identifier(ref name) => {
+            let index = context.name_to_index(name)?;
+            Ok(Variable(index, context.entries.len() as u32))
         },
         &OpenParen => {
             if let Some(token1) = tokens.next() {
-                let term1 = parse_term_from_tokens(token1, tokens)?;
+                let term1 = parse_term_from_tokens(token1, tokens, context, runtime)?;
                 if let Some(token2) = tokens.next() {
-                    let term2 = parse_term_from_tokens(token2, tokens)?;
+                    let term2 = parse_term_from_tokens(token2, tokens, context, runtime)?;
                     if let Some(&CloseParen) = tokens.next() {
                         Ok(Application(box term1, box term2))
                     } else {
@@ -213,6 +246,22 @@ fn parse_term_from_tokens(token: &Token, tokens: &mut Peekable<Iter<Token>>) -> 
         },
         &CloseParen => {
             parse_error!("Invalid expression : Closing paren has no correspondent openning one")
+        },
+        &Let(ref name) => {
+            if let Some(next_token) = tokens.next() {
+                let term = parse_term_from_tokens(next_token, tokens, context, runtime)?;
+                runtime.insert(name.to_string(), term.clone());
+                Ok(term)
+            } else {
+                parse_error!("Let without a right side")
+            }
+        },
+        &Binding(ref name) => {
+            if let Some(term) = runtime.get(name) {
+                Ok(term.clone())
+            } else {
+                parse_error!("Unknown binding: {}", name)
+            }
         }
     }
 }
@@ -220,28 +269,45 @@ fn parse_term_from_tokens(token: &Token, tokens: &mut Peekable<Iter<Token>>) -> 
 #[cfg(test)]
 mod tests {
     use super::Term::*;
+    use super::Runtime;
     use super::parse;
 
-    use lexer::Token::*;
+    use lexer::Token;
 
-    #[test]
-    fn parse_simple_variable_test() {
-        assert_eq!(
-            parse(vec![Number(1, 1)]).ok().unwrap(),
-            vec![Variable(1, 1)]
-        );
-    }
+    // Construct helpers
+    fn lambda(arg: &str) -> Token { Token::Lambda(String::from(arg)) }
+    fn var(arg: &str) -> Token { Token::Identifier(String::from(arg)) }
 
     #[test]
     fn parse_simple_abstractions_test() {
         assert_eq!(
-            parse(vec![Lambda("x".to_string()), Number(0, 1)]).ok().unwrap(),
+            parse(vec![lambda("x"), var("x")], &mut Runtime::new()).ok().unwrap(),
             vec![Abstraction("x".to_string(), box Variable(0, 1))]
         );
 
         assert_eq!(
-            parse(vec![Lambda("x".to_string()), Lambda("y".to_string()), OpenParen, OpenParen, Number(0, 2), Number(1, 2), CloseParen, Number(2, 2), CloseParen]).ok().unwrap(),
-            vec![Abstraction("x".to_string(), box Abstraction("y".to_string(), box Application(box Application(box Variable(0, 2), box Variable(1, 2)), box Variable(2, 2))))]
+            parse(vec![
+                  lambda("x"), lambda("y"),
+                  Token::OpenParen, Token::OpenParen,
+                  var("x"), var("y"),
+                  Token::CloseParen,
+                  var("x"),
+                  Token::CloseParen
+            ], &mut Runtime::new()).ok().unwrap(),
+            vec![
+                Abstraction(
+                    "x".to_string(),
+                    box Abstraction(
+                        "y".to_string(),
+                        box Application(
+                            box Application(
+                                box Variable(1, 2), box Variable(0, 2)
+                            ),
+                            box Variable(1, 2)
+                        )
+                    )
+                )
+            ]
         );
     }
 
@@ -259,4 +325,5 @@ mod tests {
         let term = Abstraction("x".to_string(), box Abstraction("y".to_string(), box Application(box Application(box Variable(0, 2), box Variable(1, 2)), box Variable(0, 2))));
         assert_eq!(term.to_string(), "λx.λy.((y x) y)");
     }
+
 }

@@ -1,6 +1,6 @@
 [package]
 name = "ulc"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["meddle <n.tzvetinov@gmail.com>"]
 
 [dependencies]
